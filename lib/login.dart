@@ -62,6 +62,7 @@ class _LoginPageState extends State<LoginPage> {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           title TEXT,
           description TEXT,
+          date TEXT,
           isDone INTEGER,
           user_id INTEGER,
           FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE

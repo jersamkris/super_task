@@ -32,6 +32,23 @@ class _RegistrationPageState extends State<RegistrationPage> {
   }
 
   Future<void> _register() async {
+    if (usernameController.text.isEmpty || passwordController.text.isEmpty) {
+      showDialog(
+        context: this.context,
+        builder: (context) => AlertDialog(
+          title: Text('Registration Failed'),
+          content: Text('Please fill in both username and password.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     try {
       await database.insert('users', {
         'username': usernameController.text,

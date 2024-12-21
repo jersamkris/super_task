@@ -1,6 +1,7 @@
 // ignore_for_file: prefer_const_constructors, use_build_context_synchronously, prefer_const_literals_to_create_immutables
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -37,6 +38,7 @@ class _MyHomePageState extends State<MyHomePage> {
   late Database database;
   List<Map<String, dynamic>> tasks = [];
   var roundCorner = 8.0;
+  var dateFormat = 'd MMM yyyy, hh:mm';
 
   @override
   void initState() {
@@ -76,43 +78,6 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  Future<void> _addTask(String title, String description) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    int? userId = prefs.getInt('user_id');
-
-    await database.insert('tasks', {
-      'user_id': userId,
-      'title': title,
-      'description': description,
-      'isDone': 0,
-    });
-    _refreshTasks();
-  }
-
-  Future<void> _updateTask(
-      int id, String title, String description, int isDone) async {
-    await database.update(
-      'tasks',
-      {
-        'title': title,
-        'description': description,
-        'isDone': isDone,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    _refreshTasks();
-  }
-
-  Future<void> _deleteTask(int id) async {
-    await database.delete(
-      'tasks',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    _refreshTasks();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -148,11 +113,11 @@ class _MyHomePageState extends State<MyHomePage> {
                           task: task,
                           onCheckboxChanged: (value) {
                             _updateTask(
-                              task['id'],
-                              task['title'],
-                              task['description'],
-                              value ? 1 : 0,
-                            );
+                                task['id'],
+                                task['title'],
+                                task['description'],
+                                value ? 1 : 0,
+                                task['date']);
                           },
                           onDelete: () {
                             _deleteTask(task['id']);
@@ -185,11 +150,11 @@ class _MyHomePageState extends State<MyHomePage> {
                           task: task,
                           onCheckboxChanged: (value) {
                             _updateTask(
-                              task['id'],
-                              task['title'],
-                              task['description'],
-                              value ? 1 : 0,
-                            );
+                                task['id'],
+                                task['title'],
+                                task['description'],
+                                value ? 1 : 0,
+                                task['date']);
                           },
                           onDelete: () {
                             _deleteTask(task['id']);
@@ -238,7 +203,17 @@ class _MyHomePageState extends State<MyHomePage> {
                 : TextDecoration.none,
           ),
         ),
-        subtitle: Text(task['description']),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(task['description']),
+            if (task['date'] != null)
+              Text(
+                DateFormat(dateFormat).format(DateTime.parse(task['date'])),
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+          ],
+        ),
         leading: Checkbox(
           value: task['isDone'] == 1,
           onChanged: (value) => onCheckboxChanged(value!),
@@ -275,6 +250,11 @@ class _MyHomePageState extends State<MyHomePage> {
     final TextEditingController descriptionController = TextEditingController(
       text: task != null ? task['description'] : '',
     );
+    final TextEditingController dateController = TextEditingController(
+      text: task != null
+          ? DateFormat(dateFormat).format(DateTime.parse(task['date']))
+          : '',
+    );
 
     showDialog(
       context: this.context,
@@ -308,6 +288,48 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                   maxLines: 3,
                 ),
+                SizedBox(height: 16),
+                TextField(
+                  controller: dateController,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: 'Date & Time',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(roundCorner),
+                    ),
+                    suffixIcon: Icon(Icons.calendar_today),
+                  ),
+                  onTap: () async {
+                    DateTime? pickedDate = await showDatePicker(
+                      context: this.context,
+                      initialDate: task != null
+                          ? DateTime.parse(task['date'])
+                          : DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+
+                    if (pickedDate != null) {
+                      TimeOfDay? pickedTime = await showTimePicker(
+                        context: this.context,
+                        initialTime: TimeOfDay.now(),
+                      );
+
+                      if (pickedTime != null) {
+                        final DateTime fullDateTime = DateTime(
+                          pickedDate.year,
+                          pickedDate.month,
+                          pickedDate.day,
+                          pickedTime.hour,
+                          pickedTime.minute,
+                        );
+
+                        dateController.text = DateFormat(dateFormat).format(
+                            DateTime.parse(fullDateTime.toIso8601String()));
+                      }
+                    }
+                  },
+                ),
               ],
             ),
           ),
@@ -321,20 +343,31 @@ class _MyHomePageState extends State<MyHomePage> {
             TextButton(
               onPressed: () {
                 if (titleController.text.trim().isEmpty ||
-                    descriptionController.text.trim().isEmpty) {
+                    descriptionController.text.trim().isEmpty ||
+                    dateController.text.trim().isEmpty) {
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    SnackBar(content: Text('Both fields are required')),
+                    SnackBar(content: Text('All fields are required')),
                   );
                   return;
                 }
+
+                DateTime parsedDate =
+                    DateFormat(dateFormat).parse(dateController.text);
+                String iso8601Date = parsedDate.toIso8601String();
+
                 if (task == null) {
-                  _addTask(titleController.text, descriptionController.text);
+                  _addTask(
+                    titleController.text,
+                    descriptionController.text,
+                    iso8601Date,
+                  );
                 } else {
                   _updateTask(
                     task['id'],
                     titleController.text,
                     descriptionController.text,
                     task['isDone'],
+                    iso8601Date,
                   );
                 }
                 Navigator.of(dialogContext).pop();
@@ -345,5 +378,44 @@ class _MyHomePageState extends State<MyHomePage> {
         );
       },
     );
+  }
+
+  Future<void> _addTask(String title, String description, String date) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int? userId = prefs.getInt('user_id');
+
+    await database.insert('tasks', {
+      'user_id': userId,
+      'title': title,
+      'description': description,
+      'isDone': 0,
+      'date': date,
+    });
+    _refreshTasks();
+  }
+
+  Future<void> _updateTask(
+      int id, String title, String description, int isDone, String date) async {
+    await database.update(
+      'tasks',
+      {
+        'title': title,
+        'description': description,
+        'isDone': isDone,
+        'date': date,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    _refreshTasks();
+  }
+
+  Future<void> _deleteTask(int id) async {
+    await database.delete(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    _refreshTasks();
   }
 }
